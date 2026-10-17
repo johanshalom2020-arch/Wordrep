@@ -1,0 +1,298 @@
+@import "tailwindcss";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+
+@theme {
+  --color-ink: #0a0b0d;
+  --color-ink-2: #0e1013;
+  --color-ink-3: #14171c;
+  --color-line: #20242b;
+  --color-line-2: #2c313a;
+  --color-paper: #ece7da;
+  --color-paper-2: #b9b4a6;
+  --color-muted: #82878f;
+  --color-accent: #ff5a26;
+  --color-accent-2: #f5b944;
+  --color-ok: #3ddc97;
+  --color-warn: #f5b944;
+  --color-wasm: #6ea8fe;
+  --color-bad: #ff6b6b;
+
+  --font-sans: "Space Grotesk Variable", system-ui, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-feature-settings: "ss01", "cv05";
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #0a0b0d;
+}
+
+/* ---- background texture: blueprint grid + noise ---- */
+.blueprint {
+  background-image:
+    linear-gradient(to right, rgba(236, 231, 218, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(236, 231, 218, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---- hairline rules with tick ---- */
+.rule {
+  position: relative;
+  height: 1px;
+  background: var(--color-line);
+}
+.rule::before,
+.rule::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 7px;
+  background: var(--color-accent);
+}
+.rule::before { left: 0; }
+.rule::after { right: 0; }
+
+/* ---- animated dashes for diagrams ---- */
+.dash-anim {
+  stroke-dasharray: 6 7;
+  animation: dashmove 1.6s linear infinite;
+}
+.dash-anim-slow {
+  stroke-dasharray: 3 8;
+  animation: dashmove 3.2s linear infinite;
+}
+@keyframes dashmove {
+  to { stroke-dashoffset: -13; }
+}
+
+/* ---- marquee ---- */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 42s linear infinite;
+}
+.marquee-track:hover { animation-play-state: paused; }
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+
+/* ---- reveal on scroll ---- */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .marquee-track { animation: none; }
+  .dash-anim, .dash-anim-slow { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* ---- scrollspy dot ---- */
+.nav-item { transition: color 0.3s ease; }
+.nav-item .nav-bar {
+  transition: background 0.3s ease, width 0.3s ease;
+}
+
+/* ---- code blocks ---- */
+.code-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.code-scroll::-webkit-scrollbar-thumb { background: var(--color-line-2); border-radius: 99px; }
+.code-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- benchmark bars ---- */
+.bench-fill {
+  width: 0;
+  transition: width 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bench-on .bench-fill { width: var(--w); }
+
+/* ---- underline marker ---- */
+.mark {
+  background-image: linear-gradient(120deg, rgba(255, 90, 38, 0.32), rgba(255, 90, 38, 0.32));
+  background-repeat: no-repeat;
+  background-size: 100% 38%;
+  background-position: 0 88%;
+}
+
+/* thin scrollbar for the rail */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: #23272f; border-radius: 99px; border: 3px solid #0a0b0d; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ================================================================== */
+/*  EDITOR — paper + prose                                             */
+/* ================================================================== */
+
+.paper-scroll {
+  background:
+    radial-gradient(1000px 500px at 50% -80px, rgba(255, 90, 38, 0.05), transparent 60%),
+    #232529;
+}
+
+.folio-paper-wrap {
+  padding: 44px 20px 8px;
+}
+
+.folio-paper {
+  width: min(820px, 100%);
+  min-height: 1120px;
+  margin: 0 auto;
+  padding: 88px 78px 104px;
+  background: #fdfdfb;
+  color: #1b1d22;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 18px 60px -18px rgba(0, 0, 0, 0.55);
+}
+
+.folio-prose {
+  outline: none;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  caret-color: var(--color-accent);
+}
+.folio-prose p { margin: 0 0 0.75em; }
+.folio-prose h1,
+.folio-prose h2,
+.folio-prose h3 {
+  font-family: "Space Grotesk Variable", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+  color: #101216;
+}
+.folio-prose h1 { font-size: 2.1em; margin: 0.4em 0 0.5em; }
+.folio-prose h2 { font-size: 1.5em; margin: 1.1em 0 0.45em; }
+.folio-prose h3 { font-size: 1.18em; margin: 1em 0 0.35em; }
+.folio-prose ul, .folio-prose ol { margin: 0 0 0.9em; padding-left: 1.5em; }
+.folio-prose ul { list-style: disc; }
+.folio-prose ol { list-style: decimal; }
+.folio-prose ul ul { list-style: circle; }
+.folio-prose ol ol { list-style: lower-alpha; }
+.folio-prose li p { margin: 0.15em 0; }
+.folio-prose blockquote {
+  margin: 1em 0;
+  padding: 0.1em 0 0.1em 1.1em;
+  border-left: 3px solid #d7dae0;
+  color: #4b5058;
+  font-style: italic;
+}
+.folio-prose hr { border: none; border-top: 1.5px solid #d7dae0; margin: 1.6em 0; }
+.folio-prose a { color: #c2410c; text-decoration: underline; text-underline-offset: 2px; cursor: text; }
+.folio-prose code {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-size: 0.86em;
+  background: #f0f1f4;
+  border: 1px solid #e3e5ea;
+  border-radius: 4px;
+  padding: 0.12em 0.35em;
+}
+.folio-prose pre {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-size: 0.83em;
+  background: #14161a;
+  color: #e8e4d8;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 1em 0;
+  white-space: pre-wrap;
+}
+.folio-prose pre code { background: none; border: none; padding: 0; color: inherit; }
+.folio-prose mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
+.folio-prose img { max-width: 100%; border-radius: 4px; }
+.folio-prose img.ProseMirror-selectednode { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.folio-prose ::selection { background: rgba(255, 90, 38, 0.22); }
+
+.folio-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #9aa0a8;
+}
+
+/* tables */
+.folio-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.1em 0;
+  table-layout: fixed;
+}
+.folio-prose th,
+.folio-prose td {
+  border: 1px solid #ced3db;
+  padding: 7px 11px;
+  vertical-align: top;
+  position: relative;
+}
+.folio-prose th {
+  background: #eef1f5;
+  font-family: "Space Grotesk Variable", sans-serif;
+  font-weight: 600;
+  font-size: 0.88em;
+  text-align: left;
+}
+.folio-prose .selectedCell {
+  background: rgba(255, 90, 38, 0.1);
+}
+.folio-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+.folio-prose .tableWrapper { overflow-x: auto; }
+.folio-prose.resize-cursor { cursor: col-resize; }
+
+/* ================================================================== */
+/*  PRINT                                                              */
+/* ================================================================== */
+@media print {
+  @page { size: A4; margin: 0; }
+  body { background: #fff !important; }
+  .no-print { display: none !important; }
+  .paper-scroll { background: #fff !important; overflow: visible !important; }
+  .folio-paper-wrap { padding: 0 !important; }
+  .folio-paper {
+    width: 100% !important;
+    min-height: auto !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 2.4cm 2.2cm !important;
+  }
+}
