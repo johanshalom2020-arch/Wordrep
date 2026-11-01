@@ -1,12 +1,16 @@
 import { db } from "@/db";
 import { documents } from "@/db/schema";
+import { requireApiSession } from "@/lib/session";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   const { id } = await ctx.params;
   const [row] = await db.select().from(documents).where(eq(documents.id, id));
   if (!row) return Response.json({ ok: false, error: "not_found" }, { status: 404 });
@@ -14,6 +18,9 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PUT(req: Request, ctx: Ctx) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   const { id } = await ctx.params;
   try {
     const body = (await req.json()) as {
@@ -38,7 +45,10 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 }
 
-export async function DELETE(_req: Request, ctx: Ctx) {
+export async function DELETE(req: Request, ctx: Ctx) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   const { id } = await ctx.params;
   await db.delete(documents).where(eq(documents.id, id));
   return Response.json({ ok: true });
