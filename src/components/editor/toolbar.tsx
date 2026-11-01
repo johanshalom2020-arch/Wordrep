@@ -20,6 +20,7 @@ import {
   Palette,
   Quote,
   Redo2,
+  ScissorsLineDashed,
   Strikethrough,
   Table as TableIcon,
   Underline as UnderlineIcon,
@@ -102,7 +103,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
           : "p";
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 px-4 py-2.5">
+    <div className="flex min-w-max items-center gap-0.5 px-4 py-2.5">
       <Btn title="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}>
         <Undo2 size={ICON} />
       </Btn>
@@ -248,6 +249,9 @@ export function Toolbar({ editor }: { editor: Editor }) {
       <Btn title="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
         <Minus size={ICON} />
       </Btn>
+      <Btn title="Page break (Ctrl/⌘ + Enter)" onClick={() => editor.chain().focus().setPageBreak().run()}>
+        <ScissorsLineDashed size={ICON} />
+      </Btn>
       <Sep />
 
       <Btn title="Insert link" active={editor.isActive("link")} onClick={insertLink}>
@@ -297,7 +301,7 @@ export function TableActions({ editor }: { editor: Editor }) {
     ["delete table", () => editor.chain().focus().deleteTable().run()],
   ];
   return (
-    <div className="flex flex-wrap items-center gap-1 border-t border-line/70 px-4 py-1.5">
+    <div className="flex min-w-max items-center gap-1 border-t border-line/70 px-4 py-1.5">
       <span className="mr-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted">Table</span>
       {ops.map(([label, fn]) => (
         <button

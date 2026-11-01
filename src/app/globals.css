@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tiptap-community-pages/styles.css";
 @import "@fontsource-variable/space-grotesk";
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/instrument-serif/400.css";
@@ -154,26 +155,60 @@ body {
 /* ================================================================== */
 
 .paper-scroll {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   background:
     radial-gradient(1000px 500px at 50% -80px, rgba(255, 90, 38, 0.05), transparent 60%),
     #232529;
 }
+.paper-scroll::-webkit-scrollbar { width: 12px; }
+.paper-scroll::-webkit-scrollbar-track { background: #1b1d21; }
+.paper-scroll::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  background: #4a4e56;
+  border: 3px solid #1b1d21;
+  border-radius: 99px;
+}
+.paper-scroll::-webkit-scrollbar-thumb:hover { background: #626772; }
+.paper-scroll { scrollbar-color: #4a4e56 #1b1d21; scrollbar-width: auto; }
 
-.folio-paper-wrap {
-  padding: 44px 20px 8px;
+.toolbar-scroll { scrollbar-width: thin; scrollbar-color: #424750 transparent; }
+.toolbar-scroll::-webkit-scrollbar { height: 6px; }
+.toolbar-scroll::-webkit-scrollbar-track { background: transparent; }
+.toolbar-scroll::-webkit-scrollbar-thumb { background: #424750; border: 1px solid #0e1013; }
+
+/* The page wrapper scales to fit narrow screens; this outer canvas is scrolled
+   by .paper-scroll so the header and formatting toolbar never move away. */
+.folio-page-viewport {
+  min-height: 0;
+  padding: 42px 20px 44px;
+  overflow: visible;
+  background: transparent !important;
+}
+
+.folio-page-viewport .page-wrapper-viewport,
+.folio-page-viewport .page-wrapper-scaled-outer {
+  overflow: visible;
 }
 
 .folio-paper {
-  width: min(820px, 100%);
-  min-height: 1120px;
-  margin: 0 auto;
-  padding: 88px 78px 104px;
-  background: #fdfdfb;
   color: #1b1d22;
-  border-radius: 3px;
+  border-radius: 2px;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 18px 60px -18px rgba(0, 0, 0, 0.55);
+    0 1px 2px rgba(0, 0, 0, 0.42),
+    0 20px 62px -20px rgba(0, 0, 0, 0.72);
+}
+
+/* Make each generated page gap read as a real separation between sheets. */
+.folio-paper .ctp-pages-gap {
+  background-color: #232529 !important;
+  background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.28), transparent 35%, transparent 65%, rgba(0, 0, 0, 0.24)) !important;
+}
+.folio-paper .ctp-pages-footer,
+.folio-paper .ctp-pages-header,
+.folio-paper .ctp-pages-first-header,
+.folio-paper .ctp-pages-last-footer {
+  color: #777c85;
 }
 
 .folio-prose {
@@ -233,6 +268,7 @@ body {
 .folio-prose mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
 .folio-prose img { max-width: 100%; border-radius: 4px; }
 .folio-prose img.ProseMirror-selectednode { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.folio-prose .page-break-content { display: none; }
 .folio-prose ::selection { background: rgba(255, 90, 38, 0.22); }
 
 .folio-prose p.is-editor-empty:first-child::before {
@@ -283,16 +319,37 @@ body {
 /*  PRINT                                                              */
 /* ================================================================== */
 @media print {
-  @page { size: A4; margin: 0; }
-  body { background: #fff !important; }
+  @page { size: A4; margin: 22mm 20mm; }
+  html, body { background: #fff !important; }
+  body { color: #111 !important; }
   .no-print { display: none !important; }
-  .paper-scroll { background: #fff !important; overflow: visible !important; }
-  .folio-paper-wrap { padding: 0 !important; }
-  .folio-paper {
-    width: 100% !important;
-    min-height: auto !important;
+  .paper-scroll {
+    background: #fff !important;
+    overflow: visible !important;
+  }
+  .folio-page-viewport,
+  .page-wrapper-container,
+  .page-wrapper-viewport {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .page-wrapper-scaled-outer {
+    width: auto !important;
+    height: auto !important;
+  }
+  .folio-paper,
+  .page-wrapper-page {
+    position: static !important;
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    padding: 2.4cm 2.2cm !important;
+    transform: none !important;
   }
+  .folio-prose { min-height: 0 !important; }
+  .page-break { break-after: page; page-break-after: always; }
 }

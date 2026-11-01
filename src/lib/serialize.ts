@@ -65,6 +65,8 @@ function blockMd(node: Jrn, depth: number): string {
       return "```\n" + (node.content ?? []).map((c) => c.text ?? "").join("") + "\n```";
     case "horizontalRule":
       return "---";
+    case "pageBreak":
+      return '<div style="break-after: page; page-break-after: always;"></div>';
     case "bulletList":
       return (node.content ?? [])
         .map((li) => {

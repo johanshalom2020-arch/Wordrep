@@ -1,10 +1,12 @@
 "use client";
 
-import type { Content, Editor } from "@tiptap/core";
+import type { Content } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronUp,
   CloudUpload,
   FileDown,
   FilePlus2,
@@ -16,10 +18,11 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { buildExtensions } from "@/lib/editor-extensions";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { buildExtensions, FOLIO_PAGE_MARGINS } from "@/lib/editor-extensions";
 import { exportDocx } from "@/lib/docx-export";
 import { countWords, download, jsonToMarkdown, safeFilename, type Jrn } from "@/lib/serialize";
+import { PageWrapper } from "tiptap-community-pages/react";
 import { TableActions, Toolbar } from "./toolbar";
 
 type DocRow = {
@@ -32,6 +35,13 @@ type DocRow = {
 };
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
+
+type DocPatch = {
+  title: string;
+  content: unknown;
+  wordCount: number;
+  updatedAt: string;
+};
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -48,7 +58,7 @@ function EditorPane({
   doc: DocRow;
   pendingHtml: string | null;
   onConsumeImport: () => void;
-  onSaved: (id: string, patch: { title: string; wordCount: number; updatedAt: string }) => void;
+  onSaved: (id: string, patch: DocPatch) => void;
 }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [title, setTitle] = useState(doc.title);
@@ -57,6 +67,8 @@ function EditorPane({
   const [chars, setChars] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [pageCount, setPageCount] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const dirtyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,27 +77,41 @@ function EditorPane({
     title: doc.title,
     words: 0,
   });
-  const editorRef = useRef<Editor | null>(null);
+  const paperScrollRef = useRef<HTMLDivElement>(null);
+
+  const extensions = useMemo(
+    () =>
+      buildExtensions({
+        onPageCountChange: (count) => {
+          const safeCount = Math.max(1, count);
+          setPageCount(safeCount);
+          setCurrentPage((page) => Math.min(page, safeCount));
+        },
+      }),
+    []
+  );
 
   const save = useCallback(async () => {
     if (!dirtyRef.current) return;
     dirtyRef.current = false;
     setSaveState("saving");
+    const snapshot = { ...latestRef.current };
     try {
       const res = await fetch(`/api/documents/${doc.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          title: latestRef.current.title,
-          content: latestRef.current.json,
-          wordCount: latestRef.current.words,
+          title: snapshot.title,
+          content: snapshot.json,
+          wordCount: snapshot.words,
         }),
       });
       if (!res.ok) throw new Error("save failed");
-      setSaveState("saved");
+      setSaveState(dirtyRef.current ? "dirty" : "saved");
       onSaved(doc.id, {
-        title: latestRef.current.title,
-        wordCount: latestRef.current.words,
+        title: snapshot.title,
+        content: snapshot.json,
+        wordCount: snapshot.words,
         updatedAt: new Date().toISOString(),
       });
     } catch {
@@ -105,6 +131,12 @@ function EditorPane({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (dirtyRef.current) {
+        onSaved(doc.id, {
+          title: latestRef.current.title,
+          content: latestRef.current.json,
+          wordCount: latestRef.current.words,
+          updatedAt: new Date().toISOString(),
+        });
         fetch(`/api/documents/${doc.id}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -117,13 +149,13 @@ function EditorPane({
         }).catch(() => undefined);
       }
     };
-  }, [doc.id]);
+  }, [doc.id, onSaved]);
 
   const editor = useEditor({
-    extensions: buildExtensions(),
+    extensions,
     content: doc.content as Content,
     immediatelyRender: false,
-    autofocus: "end",
+    autofocus: false,
     editorProps: { attributes: { class: "folio-prose" } },
     onUpdate: ({ editor: e }) => {
       const text = e.getText();
@@ -133,8 +165,6 @@ function EditorPane({
       scheduleSave();
     },
   });
-  editorRef.current = editor;
-
   /* initial counters */
   useEffect(() => {
     if (!editor) return;
@@ -148,7 +178,12 @@ function EditorPane({
   useEffect(() => {
     if (!editor || pendingHtml == null) return;
     editor.commands.setContent(pendingHtml, { emitUpdate: true });
+    editor.commands.setTextSelection(1);
     onConsumeImport();
+    requestAnimationFrame(() => {
+      paperScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      setCurrentPage(1);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, pendingHtml]);
 
@@ -161,6 +196,42 @@ function EditorPane({
       editor.off("transaction", fn);
     };
   }, [editor]);
+
+  const updateVisiblePage = useCallback(() => {
+    const scroller = paperScrollRef.current;
+    const pageStack = scroller?.querySelector<HTMLElement>(".page-wrapper-scaled-outer");
+    if (!scroller || !pageStack || pageCount <= 1) {
+      setCurrentPage(1);
+      return;
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const stackRect = pageStack.getBoundingClientRect();
+    const focusLine = scrollerRect.top + Math.min(scroller.clientHeight * 0.3, 220);
+    const pageHeight = stackRect.height / pageCount;
+    const visible = Math.floor((focusLine - stackRect.top) / Math.max(1, pageHeight)) + 1;
+    setCurrentPage(Math.max(1, Math.min(pageCount, visible)));
+  }, [pageCount]);
+
+  const scrollToPage = useCallback(
+    (page: number) => {
+      const scroller = paperScrollRef.current;
+      const pageStack = scroller?.querySelector<HTMLElement>(".page-wrapper-scaled-outer");
+      if (!scroller || !pageStack) return;
+
+      const targetPage = Math.max(1, Math.min(pageCount, page));
+      const scrollerRect = scroller.getBoundingClientRect();
+      const stackRect = pageStack.getBoundingClientRect();
+      const stackTop = scroller.scrollTop + stackRect.top - scrollerRect.top;
+      const pageHeight = stackRect.height / Math.max(1, pageCount);
+      scroller.scrollTo({
+        top: Math.max(0, stackTop + (targetPage - 1) * pageHeight - 16),
+        behavior: "smooth",
+      });
+      setCurrentPage(targetPage);
+    },
+    [pageCount]
+  );
 
   const base = safeFilename(title);
 
@@ -176,7 +247,7 @@ function EditorPane({
         download(new Blob([jsonToMarkdown(json)], { type: "text/markdown" }), `${base}.md`);
       } else if (kind === "html") {
         const body = editor.getHTML();
-        const shell = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{max-width:760px;margin:48px auto;font-family:Georgia,serif;line-height:1.65;padding:0 24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 10px}blockquote{border-left:3px solid #ddd;margin:0;padding-left:16px;color:#555}img{max-width:100%}</style></head><body>${body}</body></html>`;
+        const shell = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{max-width:760px;margin:48px auto;font-family:Georgia,serif;line-height:1.65;padding:0 24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 10px}blockquote{border-left:3px solid #ddd;margin:0;padding-left:16px;color:#555}img{max-width:100%}.page-break{break-after:page;page-break-after:always}</style></head><body>${body}</body></html>`;
         download(new Blob([shell], { type: "text/html" }), `${base}.html`);
       } else {
         download(new Blob([editor.getText()], { type: "text/plain" }), `${base}.txt`);
@@ -194,9 +265,9 @@ function EditorPane({
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       {/* document header */}
-      <header className="no-print flex flex-wrap items-center gap-3 border-b border-line bg-ink-2 px-4 py-2.5 md:px-6">
+      <header className="no-print flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-ink-2 px-4 py-2.5 md:px-6">
         <input
           value={title}
           onChange={(e) => {
@@ -256,32 +327,68 @@ function EditorPane({
       </header>
 
       {/* toolbar */}
-      <div className="no-print sticky top-0 z-10 border-b border-line bg-ink-2/95 backdrop-blur">
+      <div className="toolbar-scroll no-print z-10 shrink-0 overflow-x-auto border-b border-line bg-ink-2/95 backdrop-blur">
         {editor ? <Toolbar editor={editor} /> : null}
         {editor ? <TableActions editor={editor} /> : null}
       </div>
 
-      {/* paper */}
-      <div className="paper-scroll flex-1 overflow-y-auto">
-        <div className="folio-paper-wrap">
-          <div className="folio-paper">
-            <EditorContent editor={editor} />
-          </div>
-          <div className="no-print pb-10 pt-3 text-center font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
-            A4 · 210 × 297 mm · margins 25 mm
-          </div>
+      {/* paged, independently scrollable document canvas */}
+      <div
+        ref={paperScrollRef}
+        className="paper-scroll min-h-0 flex-1 overflow-y-scroll overscroll-contain"
+        onScroll={updateVisiblePage}
+      >
+        <PageWrapper
+          format="A4"
+          orientation="portrait"
+          margins={FOLIO_PAGE_MARGINS}
+          containerBackground="#232529"
+          containerClassName="folio-page-viewport"
+          pageClassName="folio-paper"
+          responsive
+          minScale={0.4}
+        >
+          <EditorContent editor={editor} />
+        </PageWrapper>
+        <div className="no-print pb-8 pt-1 text-center font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
+          A4 · 210 × 297 mm · {pageCount} {pageCount === 1 ? "page" : "pages"}
         </div>
       </div>
 
       {/* status bar */}
-      <footer className="no-print flex items-center justify-between border-t border-line bg-ink-2 px-4 py-2 md:px-6">
+      <footer className="no-print flex shrink-0 items-center justify-between border-t border-line bg-ink-2 px-4 py-2 md:px-6">
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
           <span>{words.toLocaleString()} words</span>
           <span className="hidden sm:inline">{chars.toLocaleString()} characters</span>
         </div>
-        <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
-          <span className="hidden md:inline">Autosave → PostgreSQL</span>
-          <span className="flex items-center gap-1.5 text-ok">
+        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+          <div className="flex items-center rounded border border-line bg-ink px-0.5" aria-label="Page navigation">
+            <button
+              type="button"
+              aria-label="Previous page"
+              title="Previous page"
+              disabled={currentPage <= 1}
+              onClick={() => scrollToPage(currentPage - 1)}
+              className="grid h-6 w-6 place-items-center rounded text-paper-2 transition-colors hover:bg-ink-3 hover:text-paper disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronUp size={12} />
+            </button>
+            <span className="min-w-[76px] text-center tabular-nums">
+              Page {currentPage} / {pageCount}
+            </span>
+            <button
+              type="button"
+              aria-label="Next page"
+              title="Next page"
+              disabled={currentPage >= pageCount}
+              onClick={() => scrollToPage(currentPage + 1)}
+              className="grid h-6 w-6 place-items-center rounded text-paper-2 transition-colors hover:bg-ink-3 hover:text-paper disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronDown size={12} />
+            </button>
+          </div>
+          <span className="hidden lg:inline">Autosave → PostgreSQL</span>
+          <span className="hidden items-center gap-1.5 text-ok sm:flex">
             <CloudUpload size={11} />
             DOCX-ready
           </span>
@@ -303,29 +410,36 @@ export function EditorApp() {
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/documents");
-    const data = (await res.json()) as { documents?: DocRow[] };
-    const list = data.documents ?? [];
-    setDocs(list);
-    setActiveId((prev) => prev ?? list[0]?.id ?? null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/documents", { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("load failed");
+        return (await res.json()) as { documents?: DocRow[] };
+      })
+      .then((data) => {
+        const list = data.documents ?? [];
+        setDocs(list);
+        setActiveId((prev) => prev ?? list[0]?.id ?? null);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setDocs([]);
+      });
+    return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const createDoc = useCallback(
-    async (title = "Untitled document") => {
+    async (title = "Untitled document", activate = true) => {
       const res = await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title, content: EMPTY_DOC }),
       });
+      if (!res.ok) return null;
       const data = (await res.json()) as { document?: DocRow };
       if (data.document) {
         setDocs((d) => [data.document as DocRow, ...(d ?? [])]);
-        setActiveId(data.document.id);
+        if (activate) setActiveId(data.document.id);
         return data.document.id;
       }
       return null;
@@ -347,7 +461,7 @@ export function EditorApp() {
   );
 
   const onSaved = useCallback(
-    (id: string, patch: { title: string; wordCount: number; updatedAt: string }) => {
+    (id: string, patch: DocPatch) => {
       setDocs((d) =>
         (d ?? [])
           .map((x) => (x.id === id ? { ...x, ...patch } : x))
@@ -364,10 +478,14 @@ export function EditorApp() {
         const form = new FormData();
         form.append("file", file);
         const res = await fetch("/api/import-docx", { method: "POST", body: form });
+        if (!res.ok) throw new Error("import failed");
         const data = (await res.json()) as { ok: boolean; html?: string; title?: string };
-        if (!data.ok || !data.html) throw new Error("import failed");
-        const id = await createDoc(data.title ?? "Imported document");
-        if (id) setPendingImport({ id, html: data.html });
+        if (!data.ok || typeof data.html !== "string") throw new Error("import failed");
+        const id = await createDoc(data.title ?? "Imported document", false);
+        if (id) {
+          setPendingImport({ id, html: data.html });
+          setActiveId(id);
+        }
       } catch {
         window.alert("Could not import that file — is it a valid .docx?");
       } finally {
@@ -378,17 +496,18 @@ export function EditorApp() {
   );
 
   useEffect(() => {
-    if (docs && docs.length === 0) void createDoc();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docs]);
+    if (!docs || docs.length > 0) return;
+    const timer = window.setTimeout(() => void createDoc(), 0);
+    return () => window.clearTimeout(timer);
+  }, [createDoc, docs]);
 
   const active = docs?.find((d) => d.id === activeId) ?? null;
   const filtered = (docs ?? []).filter((d) => d.title.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <div className="flex h-screen overflow-hidden bg-ink">
+    <div className="flex h-dvh min-h-0 overflow-hidden bg-ink">
       {/* ======= sidebar ======= */}
-      <aside className="no-print hidden w-[292px] shrink-0 flex-col border-r border-line bg-ink-2 md:flex">
+      <aside className="no-print hidden min-h-0 w-[292px] shrink-0 flex-col border-r border-line bg-ink-2 md:flex">
         <div className="flex items-center justify-between border-b border-line px-4 py-3.5">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="grid h-7 w-7 place-items-center rounded-[4px] border border-line-2 bg-ink-3 font-serif italic text-[15px] leading-none text-accent">
@@ -505,7 +624,7 @@ export function EditorApp() {
       </aside>
 
       {/* ======= main ======= */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {active ? (
           <EditorPane
             key={active.id}
