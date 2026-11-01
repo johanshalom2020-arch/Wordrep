@@ -1,13 +1,17 @@
 import { db } from "@/db";
 import { documents } from "@/db/schema";
 import { welcomeDoc } from "@/lib/welcome-doc";
+import { requireApiSession } from "@/lib/session";
 import { desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   let rows = await db.select().from(documents).orderBy(desc(documents.updatedAt));
   if (rows.length === 0) {
     const [seed] = await db
@@ -20,6 +24,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = (await req.json()) as {
       title?: string;

@@ -1,4 +1,5 @@
 import * as mammoth from "mammoth";
+import { requireApiSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -6,6 +7,9 @@ export const runtime = "nodejs";
 const MAX_BYTES = 12 * 1024 * 1024;
 
 export async function POST(req: Request) {
+  const unauthorized = await requireApiSession(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const form = await req.formData();
     const file = form.get("file");

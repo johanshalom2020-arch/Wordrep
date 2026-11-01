@@ -12,6 +12,7 @@ import {
   FilePlus2,
   FileText,
   Loader2,
+  LogOut,
   Printer,
   Search,
   Trash2,
@@ -45,6 +46,15 @@ type DocPatch = {
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
+async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  if (response.status === 401) {
+    const next = `${window.location.pathname}${window.location.search}`;
+    window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+  }
+  return response;
+}
+
 /* ================================================================== */
 /* Editor pane — one mounted per active document (key = doc.id)        */
 /* ================================================================== */
@@ -67,6 +77,7 @@ function EditorPane({
   const [chars, setChars] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -97,7 +108,7 @@ function EditorPane({
     setSaveState("saving");
     const snapshot = { ...latestRef.current };
     try {
-      const res = await fetch(`/api/documents/${doc.id}`, {
+      const res = await authenticatedFetch(`/api/documents/${doc.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -137,7 +148,7 @@ function EditorPane({
           wordCount: latestRef.current.words,
           updatedAt: new Date().toISOString(),
         });
-        fetch(`/api/documents/${doc.id}`, {
+        authenticatedFetch(`/api/documents/${doc.id}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -257,6 +268,17 @@ function EditorPane({
     }
   };
 
+  const logout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+      window.location.replace("/login");
+    } catch {
+      setLoggingOut(false);
+    }
+  };
+
   const statusMeta: Record<SaveState, { label: string; cls: string }> = {
     saved: { label: "Saved", cls: "text-ok" },
     dirty: { label: "Unsaved changes", cls: "text-accent-2" },
@@ -323,6 +345,16 @@ function EditorPane({
           className="grid h-8 w-8 place-items-center rounded-md border border-line text-paper-2 transition-colors hover:border-line-2 hover:text-paper"
         >
           <Printer size={13} />
+        </button>
+        <button
+          type="button"
+          title="Sign out"
+          aria-label="Sign out"
+          disabled={loggingOut}
+          onClick={() => void logout()}
+          className="grid h-8 w-8 place-items-center rounded-md border border-line text-paper-2 transition-colors hover:border-bad/50 hover:text-bad disabled:opacity-50"
+        >
+          {loggingOut ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
         </button>
       </header>
 
@@ -412,7 +444,7 @@ export function EditorApp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/documents", { signal: controller.signal })
+    authenticatedFetch("/api/documents", { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error("load failed");
         return (await res.json()) as { documents?: DocRow[] };
@@ -430,7 +462,7 @@ export function EditorApp() {
 
   const createDoc = useCallback(
     async (title = "Untitled document", activate = true) => {
-      const res = await fetch("/api/documents", {
+      const res = await authenticatedFetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title, content: EMPTY_DOC }),
@@ -450,7 +482,7 @@ export function EditorApp() {
   const deleteDoc = useCallback(
     async (id: string) => {
       if (!window.confirm("Delete this document permanently?")) return;
-      await fetch(`/api/documents/${id}`, { method: "DELETE" });
+      await authenticatedFetch(`/api/documents/${id}`, { method: "DELETE" });
       setDocs((d) => {
         const next = (d ?? []).filter((x) => x.id !== id);
         if (activeId === id) setActiveId(next[0]?.id ?? null);
@@ -477,7 +509,7 @@ export function EditorApp() {
       try {
         const form = new FormData();
         form.append("file", file);
-        const res = await fetch("/api/import-docx", { method: "POST", body: form });
+        const res = await authenticatedFetch("/api/import-docx", { method: "POST", body: form });
         if (!res.ok) throw new Error("import failed");
         const data = (await res.json()) as { ok: boolean; html?: string; title?: string };
         if (!data.ok || typeof data.html !== "string") throw new Error("import failed");
