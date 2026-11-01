@@ -7,6 +7,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { Placeholder } from "@tiptap/extensions";
 import { StarterKit } from "@tiptap/starter-kit";
+import { PageBreak, Pagination } from "tiptap-community-pages";
 
 /* ---------- custom marks: font family / size / color ---------- */
 
@@ -62,7 +63,13 @@ const SizedImage = Image.extend({
   },
 });
 
-export function buildExtensions() {
+export const FOLIO_PAGE_MARGINS = { top: 88, right: 78, bottom: 96, left: 78 } as const;
+
+type ExtensionOptions = {
+  onPageCountChange?: (count: number) => void;
+};
+
+export function buildExtensions(options: ExtensionOptions = {}) {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -77,6 +84,18 @@ export function buildExtensions() {
     FontFamily,
     FontSize,
     TextColor,
+    PageBreak,
+    Pagination.configure({
+      pageFormat: "A4",
+      orientation: "portrait",
+      margins: FOLIO_PAGE_MARGINS,
+      pageGap: 30,
+      showPageNumbers: true,
+      pageNumberSeparator: "/",
+      widowOrphanControl: true,
+      minLinesAtBreak: 2,
+      onPageCountChange: options.onPageCountChange,
+    }),
     Placeholder.configure({ placeholder: "Start writing — Folio saves every keystroke…" }),
   ];
 }

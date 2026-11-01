@@ -8,6 +8,7 @@ import {
   ImageRun,
   LevelFormat,
   Packer,
+  PageBreak as DocxPageBreak,
   Paragraph,
   ShadingType,
   Table,
@@ -274,6 +275,9 @@ function blocks(node: Jrn): (Paragraph | Table)[] {
             border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "9BA3AF", space: 1 } },
           })
         );
+        break;
+      case "pageBreak":
+        out.push(new Paragraph({ children: [new DocxPageBreak()] }));
         break;
       case "bulletList":
       case "orderedList":
